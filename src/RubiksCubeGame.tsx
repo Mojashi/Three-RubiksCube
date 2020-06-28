@@ -1,7 +1,7 @@
 import React, {useRef, useState,forwardRef, useLayoutEffect, useEffect, useImperativeHandle, useCallback, useMemo} from 'react';
 import { Canvas, useFrame, useThree, PointerEvent } from 'react-three-fiber';
 import * as THREE from 'three';
-import { Mesh } from 'three';
+import { Mesh, MeshStandardMaterial } from 'three';
 
 enum Dir{
     UP,DN,RT,LT,FR,BK
@@ -47,16 +47,38 @@ function zip(l1:any[], l2:any[]):any[]{
 }
 
 //const Block: React.FC<{block:BlockInfo, ref:React.RefObject<any>, onMouseDown?:Function, onMouseUp?:Function, onMouseMove?:Function, id:number}> = (props) =>{
+function useCombinedRefs(...refs:any[]) {
+    const targetRef = React.useRef()
+
+    React.useEffect(() => {
+        refs.forEach(ref => {
+            if (!ref) return
+
+            if (typeof ref === 'function') {
+                ref(targetRef.current)
+            } else {
+                ref.current = targetRef.current
+            }
+        })
+    }, [refs])
+
+    return targetRef
+}
 
 const Block= forwardRef<Mesh,{block:BlockInfo, show:boolean, onMouseDown?:Function, onMouseUp?:Function, onMouseMove?:Function, id:number}>((props, ref) =>{
     const {gl, scene, camera, size} = useThree();
     //const blockRef:React.RefObject<Mesh> = useRef<Mesh>(null);
     const {block, onMouseDown, show, onMouseUp, onMouseMove, id} = props;
-    
+    const cubeRef = useRef<Mesh>(null);
+    const combinedRef = useCombinedRefs(ref,cubeRef)
+
     //useEffect(()=>console.log(show));
-    
+    useFrame(()=>{
+        cubeRef.current!.visible = block.show || show;
+        
+    });
     return (
-        <mesh ref={ref} visible={block.show || show} position={block.position}>
+        <mesh ref={combinedRef} position={block.position}>
             {block.materials.map(matdir => {
                 const [col, dir]: [(string | number | THREE.Color), Dir] = matdir;
                 return (
@@ -127,6 +149,7 @@ function copyCube(cube:BlockInfo[][][]){
 
 const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, canvasRef:React.RefObject<HTMLDivElement>}> = (props) => {
     const ref = useRef<Mesh>(null);
+    const rotCubeRef = useRef<Mesh>(null);
     const blockRefs = [
         [[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)],[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)],[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)]],
         [[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)],[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)],[useRef<Mesh>(null),useRef<Mesh>(null),useRef<Mesh>(null)]],
@@ -136,15 +159,17 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
     const [dragging, setDragging] = useState<[BlockInfo,Dir]|null>(null);
     const [dragStartPos, setDragStartPos] = useState(new THREE.Vector2(0,0));
 
-    const [blocks, setBlocks] = useState(makeCube());
-    const [rotBlocks, setRotBlocks] = useState(makeCube(false));
-    const [rotQ, setRotQ] = useState(new THREE.Quaternion());
-    const [rot, setRot] = useState<[string, number, number]>(['x',0,0]);
+    const blocks = useRef(makeCube());
+    const rotBlocks = useRef(makeCube(false));
+    const rotQ = useRef(new THREE.Quaternion());
+    const rot = useRef<[string, number, number]>(['x',0,0]);
 
     useFrame(() => {
         if(ref.current){
             ref.current.quaternion.copy(props.cubeQuaternion);
-            //console.log(dragging);
+            rotCubeRef.current?.quaternion.copy(rotQ.current);
+
+                        //console.log(dragging);
         }
     })
 
@@ -153,87 +178,82 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
     
     const onMouseUp = useMemo(() => {
         return () => {
-            if(dragging && rot[0] !== 'x'){
-                const angle = (Math.round(rot[2] / (Math.PI / 2))%4 + 4)%4;
-                
-                setBlocks(bs => {
-                    const b = copyCube(bs);
-                    var sq:BlockInfo[][] = [[]];
-                    for (let d = 0; 3 > d; d++)
-                        for (let c = 0; 3 > c; c++)
-                            for (let r = 0; 3 > r; r++) {
-                                if (rot[0] === 'd' && rot[1] !== d) continue;
-                                if (rot[0] === 'c' && rot[1] !== c) continue;
-                                if (rot[0] === 'r' && rot[1] !== r) continue;
-                                const cb = b[d][c][r];
-                                sq[sq.length - 1].push(cb);
-                                if (sq[sq.length - 1].length === 3) sq.push([]);
-                            }
-                    if(rot[0] === 'c') sq.map(l=>l.reverse());
-                    
-                    for (var i = 0; angle > i; i++) {
-                        const mats: [string | number | THREE.Color, Dir][][][] = sq.map(l => l.map(
-                            b => b.materials.map(s=>{
-                                if(rot[0] === 'd'){
-                                    switch(s[1]){
-                                        case Dir.LT: return [s[0],Dir.FR];
-                                        case Dir.FR: return [s[0],Dir.RT];
-                                        case Dir.RT: return [s[0],Dir.BK];
-                                        case Dir.BK: return [s[0],Dir.LT];
-                                        default: return s;
-                                    }
-                                } 
-                                
-                                else if(rot[0] === 'c'){
-                                    switch(s[1]){
-                                        case Dir.UP: return [s[0],Dir.LT];
-                                        case Dir.DN: return [s[0],Dir.RT];
-                                        case Dir.LT: return [s[0],Dir.DN];
-                                        case Dir.RT: return [s[0],Dir.UP];
-                                        default: return s;
-                                    }
-                                } 
-                                
-                                else if(rot[0] === 'r'){
-                                    switch(s[1]){
-                                        case Dir.UP: return [s[0],Dir.FR];
-                                        case Dir.DN: return [s[0],Dir.BK];
-                                        case Dir.FR: return [s[0],Dir.DN];
-                                        case Dir.BK: return [s[0],Dir.UP];
-                                        default: return s;
-                                    }
-                                } 
-                                else return s;
-                            })
-                        ));
+            if(dragging && rot.current[0] !== 'x'){
+                const angle = (Math.round(rot.current[2] / (Math.PI / 2))%4 + 4)%4;
 
-                        sq[0][0].materials = mats[0][2];
-                        sq[0][1].materials = mats[1][2];
-                        sq[0][2].materials = mats[2][2];
-                        sq[1][0].materials = mats[0][1];
-                        sq[1][2].materials = mats[2][1];
-                        sq[2][0].materials = mats[0][0];
-                        sq[2][1].materials = mats[1][0];
-                        sq[2][2].materials = mats[2][0];
-                    }
-                    return b;
-                });
+                var sq: BlockInfo[][] = [[]];
+                for (let d = 0; 3 > d; d++)
+                    for (let c = 0; 3 > c; c++)
+                        for (let r = 0; 3 > r; r++) {
+                            if (rot.current[0] === 'd' && rot.current[1] !== d) continue;
+                            if (rot.current[0] === 'c' && rot.current[1] !== c) continue;
+                            if (rot.current[0] === 'r' && rot.current[1] !== r) continue;
+                            const cb = blocks.current[d][c][r];
+                            sq[sq.length - 1].push(cb);
+                            if (sq[sq.length - 1].length === 3) sq.push([]);
+                        }
+                if (rot.current[0] === 'c') sq.map(l => l.reverse());
+
+                for (var i = 0; angle > i; i++) {
+                    const mats: [string | number | THREE.Color, Dir][][][] = sq.map(l => l.map(
+                        b => b.materials.map(s => {
+                            if (rot.current[0] === 'd') {
+                                switch (s[1]) {
+                                    case Dir.LT: return [s[0], Dir.FR];
+                                    case Dir.FR: return [s[0], Dir.RT];
+                                    case Dir.RT: return [s[0], Dir.BK];
+                                    case Dir.BK: return [s[0], Dir.LT];
+                                    default: return s;
+                                }
+                            }
+
+                            else if (rot.current[0] === 'c') {
+                                switch (s[1]) {
+                                    case Dir.UP: return [s[0], Dir.LT];
+                                    case Dir.DN: return [s[0], Dir.RT];
+                                    case Dir.LT: return [s[0], Dir.DN];
+                                    case Dir.RT: return [s[0], Dir.UP];
+                                    default: return s;
+                                }
+                            }
+
+                            else if (rot.current[0] === 'r') {
+                                switch (s[1]) {
+                                    case Dir.UP: return [s[0], Dir.FR];
+                                    case Dir.DN: return [s[0], Dir.BK];
+                                    case Dir.FR: return [s[0], Dir.DN];
+                                    case Dir.BK: return [s[0], Dir.UP];
+                                    default: return s;
+                                }
+                            }
+                            else return s;
+                        })
+                    ));
+
+                    sq[0][0].materials = mats[0][2];
+                    sq[0][1].materials = mats[1][2];
+                    sq[0][2].materials = mats[2][2];
+                    sq[1][0].materials = mats[0][1];
+                    sq[1][2].materials = mats[2][1];
+                    sq[2][0].materials = mats[0][0];
+                    sq[2][1].materials = mats[1][0];
+                    sq[2][2].materials = mats[2][0];
+                }
             }
 
-            setRot(['x',0,0]);
-            setBlocks(bs => {
-                const b = copyCube(bs);
-                b.flat(2).map((cb) => cb.show = true);
-                console.log('visilbe');
-                return b;
-            });
-            setRotBlocks(bs => {
-                const b = copyCube(bs);
-                b.flat(2).map((cb) => cb.show = false);
-                return b;
-            });
-            setDragging(null);
+                    
+            for (let d = 0; 3 > d; d++) {
+                for (let c = 0; 3 > c; c++) {
+                    for (let r = 0; 3 > r; r++) {
+                        rotBlocks.current[d][c][r].materials = blocks.current[d][c][r].materials.slice(0, blocks.current[d][c][r].materials.length);
+                    }
+                }
+            }
 
+            rot.current = ['x',0,0];
+            blocks.current.flat(2).map((cb) => cb.show = true);
+            rotBlocks.current.flat(2).map((cb) => cb.show = false);
+            setDragging(null);
         };
     }, [dragging, rot]);
     const pMove = useMemo(() => {
@@ -283,9 +303,9 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
             // console.log(moveDir);
             //console.log(angle);
 
-            var bufQ = new THREE.Quaternion();
-            bufQ.setFromAxisAngle(absVec(getPos(moveDir).normalize()), angle);
-            setRotQ(bufQ);
+            // var bufQ = new THREE.Quaternion();
+            // bufQ
+            rotQ.current.setFromAxisAngle(absVec(getPos(moveDir).normalize()), angle);;
 
             var bpos = new THREE.Vector3();
             bpos.copy(b.position);
@@ -295,40 +315,30 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
             if (moveDir === Dir.FR || moveDir === Dir.BK) {ax='c'; cd = bpos.z+1;}
             if (moveDir === Dir.UP || moveDir === Dir.DN) {ax='d'; cd = bpos.y+1;}
            
-            setRot([ax, cd, angle]);
-            setDPos1(getPos(moveDir).applyQuaternion(q).normalize());
-            setDPos2(new THREE.Vector3(moveVec.x, moveVec.y, 0).normalize());
+            rot.current=[ax, cd, angle];
+            // setDPos1(getPos(moveDir).applyQuaternion(q).normalize());
+            // setDPos2(new THREE.Vector3(moveVec.x, moveVec.y, 0).normalize());
 
             //console.log(moveDir);
-            setBlocks(bbs => {
-                const bs = copyCube(bbs)//.slice(0, 3);
-                for (let d = 0; 3 > d; d++) 
-                    for (let c = 0; 3 > c; c++) 
-                        for (let r = 0; 3 > r; r++) {
-                            const cb = bs[d][c][r];
-                            if ((moveDir === Dir.RT || moveDir === Dir.LT) && cb.position.x === bpos.x) { cb.show = false; }
-                            else if ((moveDir === Dir.FR || moveDir === Dir.BK) && cb.position.z === bpos.z) { cb.show = false; }
-                            else if ((moveDir === Dir.UP || moveDir === Dir.DN) && cb.position.y === bpos.y) { cb.show = false; }
-                            else { cb.show = true; }
-                        }
+            for (let d = 0; 3 > d; d++)
+                for (let c = 0; 3 > c; c++)
+                    for (let r = 0; 3 > r; r++) {
+                        const cb = blocks.current[d][c][r];
+                        if ((moveDir === Dir.RT || moveDir === Dir.LT) && cb.position.x === bpos.x) { cb.show = false; }
+                        else if ((moveDir === Dir.FR || moveDir === Dir.BK) && cb.position.z === bpos.z) { cb.show = false; }
+                        else if ((moveDir === Dir.UP || moveDir === Dir.DN) && cb.position.y === bpos.y) { cb.show = false; }
+                        else { cb.show = true; }
+                    }
 
-                return bs;
-            });
-
-            setRotBlocks(bbs => {
-                const bs = copyCube(bbs)//.slice(0, 3);
-                for (let d = 0; 3 > d; d++) 
-                    for (let c = 0; 3 > c; c++) 
-                        for (let r = 0; 3 > r; r++) {
-                            const cb = bs[d][c][r];
-                            if ((moveDir === Dir.RT || moveDir === Dir.LT) && cb.position.x === bpos.x) { cb.show = true; }
-                            else if ((moveDir === Dir.FR || moveDir === Dir.BK) && cb.position.z === bpos.z) { cb.show = true; }
-                            else if ((moveDir === Dir.UP || moveDir === Dir.DN) && cb.position.y === bpos.y) { cb.show = true; }
-                            else { cb.show = false; }
-                        }
-
-                return bs;
-            });
+            for (let d = 0; 3 > d; d++)
+                for (let c = 0; 3 > c; c++)
+                    for (let r = 0; 3 > r; r++) {
+                        const cb = rotBlocks.current[d][c][r];
+                        if ((moveDir === Dir.RT || moveDir === Dir.LT) && cb.position.x === bpos.x) { cb.show = true; }
+                        else if ((moveDir === Dir.FR || moveDir === Dir.BK) && cb.position.z === bpos.z) { cb.show = true; }
+                        else if ((moveDir === Dir.UP || moveDir === Dir.DN) && cb.position.y === bpos.y) { cb.show = true; }
+                        else { cb.show = false; }
+                    }
 
         };
     }, [camera,dragStartPos,dragging, blockRefs]);
@@ -345,6 +355,33 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
 
     return (
         <mesh>
+        <mesh position={props.position} ref={ref} >
+            {blocks.current.flat(2).map((block, idx) => <Block show={dragging===null} ref={blockRefs[Math.round(block.position.y+1)][Math.round(block.position.z+1)][Math.round(block.position.x+1)]} block={block} id={idx} 
+                onMouseDown={(swid:number, dir:Dir, e:PointerEvent)=>{
+                    e.stopPropagation();
+                    console.log('dragst'+swid + dir);
+                    setDragStartPos(new THREE.Vector2(e.clientX,-e.clientY));
+                    setDragging([block,dir]);
+                    
+                    // rotBlocks.current=copyCube(blocks.current);
+                    for (let d = 0; 3 > d; d++) {
+                        for (let c = 0; 3 > c; c++) {
+                            for (let r = 0; 3 > r; r++) {
+                                rotBlocks.current[d][c][r].materials = blocks.current[d][c][r].materials.slice(0, blocks.current[d][c][r].materials.length);
+                                rotBlocks.current[d][c][r].show = blocks.current[d][c][r].show;
+                                rotBlocks.current[d][c][r].quaternion.copy(blocks.current[d][c][r].quaternion);
+                            }
+                        }
+                    }
+                    rotQ.current=new THREE.Quaternion();
+                }}/>
+            )}
+            
+            <mesh ref={rotCubeRef}>
+                {rotBlocks.current.flat(2).map((block, idx) =>dragging&& <Block show={false} block={block} id={idx}  />
+                )}
+            </mesh>
+        </mesh>
             {/* <mesh position={dPos1}>
             <boxBufferGeometry attach="geometry" args={[0.5,0.5,0.5]} />
             <meshStandardMaterial attach="material" color={'hotpink'} />
@@ -353,24 +390,6 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
             <boxBufferGeometry attach="geometry" args={[0.5,0.5,0.5]} />
             <meshStandardMaterial attach="material" color={'orange'} />
             </mesh> */}
-        <mesh position={props.position} ref={ref} >
-            {blocks.flat(2).map((block, idx) => <Block show={dragging===null} ref={blockRefs[Math.round(block.position.y+1)][Math.round(block.position.z+1)][Math.round(block.position.x+1)]} block={block} id={idx} 
-                onMouseDown={(swid:number, dir:Dir, e:PointerEvent)=>{
-                    e.stopPropagation();
-                    console.log('dragst'+swid + dir);
-                    setDragStartPos(new THREE.Vector2(e.clientX,-e.clientY));
-                    setDragging([block,dir]);
-                    
-                    setRotBlocks(copyCube(blocks));
-                    setRotQ(new THREE.Quaternion());
-                }}/>
-            )}
-            
-            <mesh quaternion={rotQ}>
-                {rotBlocks.flat(2).map((block, idx) =>dragging&& <Block show={false} block={block} id={idx}  />
-                )}
-            </mesh>
-        </mesh>
         </mesh>
     );
 }
