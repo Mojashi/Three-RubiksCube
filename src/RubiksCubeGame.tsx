@@ -364,15 +364,15 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
                     setDragging([block,dir]);
                     
                     // rotBlocks.current=copyCube(blocks.current);
-                    for (let d = 0; 3 > d; d++) {
-                        for (let c = 0; 3 > c; c++) {
-                            for (let r = 0; 3 > r; r++) {
-                                rotBlocks.current[d][c][r].materials = blocks.current[d][c][r].materials.slice(0, blocks.current[d][c][r].materials.length);
-                                rotBlocks.current[d][c][r].show = blocks.current[d][c][r].show;
-                                rotBlocks.current[d][c][r].quaternion.copy(blocks.current[d][c][r].quaternion);
-                            }
-                        }
-                    }
+                    // for (let d = 0; 3 > d; d++) {
+                    //     for (let c = 0; 3 > c; c++) {
+                    //         for (let r = 0; 3 > r; r++) {
+                    //             rotBlocks.current[d][c][r].materials = blocks.current[d][c][r].materials.slice(0, blocks.current[d][c][r].materials.length);
+                    //             rotBlocks.current[d][c][r].show = blocks.current[d][c][r].show;
+                    //             rotBlocks.current[d][c][r].quaternion.copy(blocks.current[d][c][r].quaternion);
+                    //         }
+                    //     }
+                    // }
                     rotQ.current=new THREE.Quaternion();
                 }}/>
             )}
@@ -430,8 +430,8 @@ export const useRect = () => {
 export default function RubiksCubeGame() {
     const { ref, rect } = useRect();
     const [dragCube, setDragCube] = useState(false);
-    const [quaternion, setQuaternion] = useState(new THREE.Quaternion());
-    const [dragBefPos, setDragBefPos] = useState({x:0, y:0});
+    const quaternion = useRef(new THREE.Quaternion());
+    const dragBefPos = useRef({x:0, y:0});
 
     // useLayoutEffect(() => {
     //     if(ref.current){
@@ -441,23 +441,22 @@ export default function RubiksCubeGame() {
 
     const onDrag = (e:PointerEvent) => {
         if(dragCube && ref){
-            var buf = quaternion;
+            var buf = quaternion.current;
             var delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-                2*Math.PI * (e.sourceEvent.clientY - dragBefPos.y) / Math.min(rect!.height,rect!.width),
-                2*Math.PI * (e.sourceEvent.clientX - dragBefPos.x) / Math.min(rect!.height,rect!.width),
+                2*Math.PI * (e.sourceEvent.clientY - dragBefPos.current.y) / Math.min(rect!.height,rect!.width),
+                2*Math.PI * (e.sourceEvent.clientX - dragBefPos.current.x) / Math.min(rect!.height,rect!.width),
                 0,
                 "XYZ"
             ));
             
             buf.multiplyQuaternions(delta, buf);
             
-            setQuaternion(buf);
+            quaternion.current.copy(buf);
         
             // console.log(rect);
             // console.log(buf);
-            setDragBefPos({x:e.sourceEvent.clientX, y:e.sourceEvent.clientY});
-            dragBefPos.x = e.sourceEvent.clientX;
-            dragBefPos.y = e.sourceEvent.clientY;
+            dragBefPos.current.x = e.clientX;
+            dragBefPos.current.y = e.clientY;
         }
     };
 
@@ -466,10 +465,12 @@ export default function RubiksCubeGame() {
         <Canvas>
             <ambientLight intensity={0.3}/>
             <pointLight position={[2, 2, 2]} />
-            <mesh onPointerDown={(e) => {console.log('push');setDragCube(true);setDragBefPos({x:e.clientX, y:e.clientY});}}
+            <mesh onPointerDown={(e) => {console.log('push');setDragCube(true);
+                dragBefPos.current.x = e.clientX;
+                dragBefPos.current.y = e.clientY;}}
                 onPointerUp={()=>setDragCube(false)} onPointerOut={()=>setDragCube(false)} onPointerMove={onDrag}>
                 
-                <Cube position={new THREE.Vector3(0,0,-5)} cubeQuaternion={quaternion} canvasRef={ref}/>
+                <Cube position={new THREE.Vector3(0,0,-5)} cubeQuaternion={quaternion.current} canvasRef={ref}/>
                 <mesh position={[0,0,-20]} >
                     <planeBufferGeometry attach="geometry" args={[1000, 1000]} />
                     <meshStandardMaterial attach="material" color={'white'} side={THREE.DoubleSide} />
