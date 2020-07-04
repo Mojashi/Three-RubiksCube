@@ -2,7 +2,12 @@ import React, {Suspense,useRef, useState,forwardRef, useLayoutEffect, useEffect,
 import { Canvas, useFrame, useThree, PointerEvent } from 'react-three-fiber';
 import * as THREE from 'three';
 import Text from './Text'
+import PartyLight from './partyLight'
 import { Mesh, MeshStandardMaterial } from 'three';
+
+import Paper from '@material-ui/core/Paper';
+import Box from '@material-ui/core/Box';
+import Typography from '@material-ui/core/Typography';
 
 enum Dir{
     UP,DN,RT,LT,FR,BK
@@ -152,9 +157,8 @@ function getRandomInt(max:number) {
     return Math.floor(Math.random() * Math.floor(max));
 }
 
-function rotCube90(cube:BlockInfo[][][], axis:string, apos:number, rotc:number){
-    
-    const angle = (Math.round(rotc / (Math.PI / 2))%4 + 4)%4;
+function rotCube90(cube:BlockInfo[][][], axis:string, apos:number, angle:number){
+
 
     var sq: BlockInfo[][] = [[]];
     for (let d = 0; 3 > d; d++)
@@ -216,12 +220,6 @@ function rotCube90(cube:BlockInfo[][][], axis:string, apos:number, rotc:number){
     }
 }
 
-function shuffleCube(cube:BlockInfo[][][], times:number){
-    for(var i = 0; times > i; i++)
-        rotCube90(cube, ['d','c','r'][getRandomInt(3)], getRandomInt(3), getRandomInt(4));
-    return cube;
-}
-
 function clearedCube(cube:BlockInfo[][][]){
     var colss:(string | number | THREE.Color)[][] = [[],[],[],[],[],[]];
 
@@ -231,7 +229,16 @@ function clearedCube(cube:BlockInfo[][][]){
         true);
 }
 
-const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, canvasRef:React.RefObject<HTMLDivElement>}> = (props) => {
+function shuffleCube(cube:BlockInfo[][][], times:number){
+    do{
+    for(var i = 0; times > i; i++)
+        rotCube90(cube, ['d','c','r'][getRandomInt(3)], getRandomInt(3), getRandomInt(4));
+    }while(clearedCube(cube));
+    return cube;
+}
+
+
+const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, canvasRef:React.RefObject<HTMLDivElement>, onHand?:Function, onClear?:Function}> = (props) => {
     const ref = useRef<Mesh>(null);
     const rotCubeRef = useRef<Mesh>(null);
     const blockRefs = [
@@ -243,17 +250,22 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
     const [dragging, setDragging] = useState<[BlockInfo,Dir]|null>(null);
     const [dragStartPos, setDragStartPos] = useState(new THREE.Vector2(0,0));
     const [cleared, setCleared] = useState(false);
+    const [handCount, setHandCount] = useState(0);
 
-    const blocks = useRef(shuffleCube(makeCube() , 2));
+    const blocks = useRef(shuffleCube(makeCube() , 5));
     const rotBlocks = useRef(copyCube(blocks.current));
     const rotQ = useRef(new THREE.Quaternion());
     const rot = useRef<[string, number, number]>(['x',0,0]);
 
     useFrame(() => {
         if(ref.current){
-            ref.current.quaternion.copy(props.cubeQuaternion);
-            rotCubeRef.current?.quaternion.copy(rotQ.current);
-
+            if(cleared){
+                ref.current.rotation.set(ref.current.rotation.x+0.07,ref.current.rotation.y+0.07,ref.current.rotation.z+0.07);
+            }
+            else{
+                ref.current.quaternion.copy(props.cubeQuaternion);
+                rotCubeRef.current?.quaternion.copy(rotQ.current);
+            }
                         //console.log(dragging);
         }
     })
@@ -263,19 +275,24 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
     
     const onMouseUp = useMemo(() => {
         return () => {
-            if(dragging && rot.current[0] !== 'x'){
-                rotCube90(blocks.current!, rot.current[0], rot.current[1], rot.current[2]);
+            const angle =(Math.round(rot.current[2] / (Math.PI / 2))%4 + 4)%4;
+            if(dragging && rot.current[0] !== 'x' && angle !== 0){
+                rotCube90(blocks.current!, rot.current[0], rot.current[1], angle);
                 rotBlocks.current = copyCube(blocks.current);
-                rot.current = ['x',0,0];
-                blocks.current.flat(2).map((cb) => cb.show = true);
-                rotBlocks.current.flat(2).map((cb) => cb.show = false);
-                setDragging(null);
-
                 if(clearedCube(blocks.current)){
                     console.log('cleared!!!');
                     setCleared(true);
+                    if(props.onClear) props.onClear();
                 }
+                if(props.onHand)
+                    props.onHand();
+                setHandCount(c=>c+1);
             }
+            rot.current = ['x',0,0];
+            blocks.current.flat(2).map((cb) => cb.show = true);
+            rotBlocks.current.flat(2).map((cb) => cb.show = false);
+
+            setDragging(null);
         };
     }, [dragging, rot]);
     const pMove = useMemo(() => {
@@ -336,7 +353,7 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
             if (moveDir === Dir.RT || moveDir === Dir.LT) {ax='r'; cd = bpos.x+1;}
             if (moveDir === Dir.FR || moveDir === Dir.BK) {ax='c'; cd = bpos.z+1;}
             if (moveDir === Dir.UP || moveDir === Dir.DN) {ax='d'; cd = bpos.y+1;}
-           
+            
             rot.current=[ax, cd, angle];
             // setDPos1(getPos(moveDir).applyQuaternion(q).normalize());
             // setDPos2(new THREE.Vector3(moveVec.x, moveVec.y, 0).normalize());
@@ -377,14 +394,14 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
 
     return (
         <mesh>
-            {cleared&&
             <Suspense fallback={null}>
-            <Text size={0.1}>CLEAR</Text>
+                <Text color={"#00ff00"} position={new THREE.Vector3(0,size.height/14,0)} size={0.4} height={6} visible={cleared}>CLEAR!</Text>
+                <Text color={"#00ff00"} position={new THREE.Vector3(0,-size.height/7,0)} height={0} size={0.2}>{String(handCount)+" MOVE"}</Text>
             </Suspense>
-            }
         <mesh position={props.position} ref={ref} >
             {blocks.current.flat(2).map((block, idx) => <Block show={dragging===null} ref={blockRefs[Math.round(block.position.y+1)][Math.round(block.position.z+1)][Math.round(block.position.x+1)]} block={block} id={idx} 
                 onMouseDown={(swid:number, dir:Dir, e:PointerEvent)=>{
+                    if(cleared) return;
                     e.stopPropagation();
                     console.log('dragst'+swid + dir);
                     setDragStartPos(new THREE.Vector2(e.clientX,-e.clientY));
@@ -459,6 +476,8 @@ export default function RubiksCubeGame() {
     const [dragCube, setDragCube] = useState(false);
     const quaternion = useRef(new THREE.Quaternion());
     const dragBefPos = useRef({x:0, y:0});
+    const [count, setCount] = useState(0);
+    const [cleared, setCleared] = useState(false);
 
     // useLayoutEffect(() => {
     //     if(ref.current){
@@ -490,20 +509,24 @@ export default function RubiksCubeGame() {
     return (
         <div ref={ref} style={{width:"100%", height:"100%"}}>
         <Canvas>
+            <PartyLight position={new THREE.Vector3(0,0,5)} angle={0.3} visible={cleared}/>
             <ambientLight intensity={0.3}/>
-            <pointLight position={[2, 2, 2]} />
+            <pointLight position={[2, 2, 2]} intensity={1} visible={!cleared}/>
             <mesh onPointerDown={(e) => {console.log('push');setDragCube(true);
                 dragBefPos.current.x = e.clientX;
                 dragBefPos.current.y = e.clientY;}}
                 onPointerUp={()=>setDragCube(false)} onPointerOut={()=>setDragCube(false)} onPointerMove={onDrag}>
                 
-                <Cube position={new THREE.Vector3(0,0,-5)} cubeQuaternion={quaternion.current} canvasRef={ref}/>
+                <Cube position={new THREE.Vector3(0,0,-5)} cubeQuaternion={quaternion.current} canvasRef={ref} onHand={()=>setCount(c=>c+1)} onClear={()=>setCleared(true)}/>
                 <mesh position={[0,0,-20]} >
                     <planeBufferGeometry attach="geometry" args={[1000, 1000]} />
                     <meshStandardMaterial attach="material" color={'white'} side={THREE.DoubleSide} />
                 </mesh>
             </mesh>
         </Canvas>
+        {/* <Box position={"absolute"} component={Paper} right={"10%"} bottom={"10%"}>
+            <Typography variant="h2">{count}手</Typography>
+        </Box> */}
         </div>
     );
 }
