@@ -30,7 +30,7 @@ const PartyLight = forwardRef<Group, {angle?:number,moveF?:(t:number)=>THREE.Vec
     return (
       <group ref={ref} {...props}>
         <mesh>
-          <spotLight ref={lightRef} angle={angle} castShadow={true} intensity={intensity} args={["0x00ffff"]} />
+          <spotLight ref={lightRef} angle={angle} castShadow={true} intensity={intensity} args={["#00ffff"]} />
           
         </mesh>    
     </group>

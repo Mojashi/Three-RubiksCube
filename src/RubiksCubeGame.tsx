@@ -85,10 +85,10 @@ const Block= forwardRef<Mesh,{block:BlockInfo, show:boolean, onMouseDown?:Functi
     });
     return (
         <mesh ref={combinedRef} position={block.position}>
-            {block.materials.map(matdir => {
+            {block.materials.map((matdir ,idx)=> {
                 const [col, dir]: [(string | number | THREE.Color), Dir] = matdir;
                 return (
-                    <mesh position={getPos(dir)} rotation={[getRot(dir).x, getRot(dir).y, getRot(dir).z]}
+                    <mesh position={getPos(dir)} rotation={[getRot(dir).x, getRot(dir).y, getRot(dir).z]} key={idx}
                         onPointerDown={(e) => {
                             if(onMouseDown)
                                 onMouseDown(id,dir,e);
@@ -280,7 +280,7 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
                 rotCube90(blocks.current!, rot.current[0], rot.current[1], angle);
                 rotBlocks.current = copyCube(blocks.current);
                 if(clearedCube(blocks.current)){
-                    console.log('cleared!!!');
+                    //console.log('cleared!!!');
                     setCleared(true);
                     if(props.onClear) props.onClear();
                 }
@@ -399,11 +399,11 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
                 <Text color={"#00ff00"} position={new THREE.Vector3(0,-size.height/7,0)} height={0} size={0.2}>{String(handCount)+" MOVE"}</Text>
             </Suspense>
         <mesh position={props.position} ref={ref} >
-            {blocks.current.flat(2).map((block, idx) => <Block show={dragging===null} ref={blockRefs[Math.round(block.position.y+1)][Math.round(block.position.z+1)][Math.round(block.position.x+1)]} block={block} id={idx} 
+            {blocks.current.flat(2).map((block, idx) => <Block show={dragging===null} ref={blockRefs[Math.round(block.position.y+1)][Math.round(block.position.z+1)][Math.round(block.position.x+1)]} block={block} key={idx} id={idx} 
                 onMouseDown={(swid:number, dir:Dir, e:PointerEvent)=>{
                     if(cleared) return;
                     e.stopPropagation();
-                    console.log('dragst'+swid + dir);
+                    //console.log('dragst'+swid + dir);
                     setDragStartPos(new THREE.Vector2(e.clientX,-e.clientY));
                     setDragging([block,dir]);
                     
@@ -422,7 +422,7 @@ const Cube: React.FC<{position:THREE.Vector3, cubeQuaternion:THREE.Quaternion, c
             )}
             
             <mesh ref={rotCubeRef}>
-                {rotBlocks.current.flat(2).map((block, idx) =>dragging&& <Block show={false} block={block} id={idx}  />
+                {rotBlocks.current.flat(2).map((block, idx) =>dragging&& <Block show={false} block={block} key={idx} id={idx}  />
                 )}
             </mesh>
         </mesh>
@@ -485,6 +485,12 @@ export default function RubiksCubeGame() {
     //     }
     // }, []);
 
+    useEffect(()=>{
+        if(cleared){
+            (window as any).twttr.widgets.load(document.getElementsByClassName("App"));
+        }
+    });
+
     const onDrag = (e:PointerEvent) => {
         if(dragCube && ref){
             var buf = quaternion.current;
@@ -507,26 +513,32 @@ export default function RubiksCubeGame() {
     };
 
     return (
-        <div ref={ref} style={{width:"100%", height:"100%"}}>
-        <Canvas>
-            <PartyLight position={new THREE.Vector3(0,0,5)} angle={0.3} visible={cleared}/>
-            <ambientLight intensity={0.3}/>
-            <pointLight position={[2, 2, 2]} intensity={1} visible={!cleared}/>
-            <mesh onPointerDown={(e) => {console.log('push');setDragCube(true);
-                dragBefPos.current.x = e.clientX;
-                dragBefPos.current.y = e.clientY;}}
-                onPointerUp={()=>setDragCube(false)} onPointerOut={()=>setDragCube(false)} onPointerMove={onDrag}>
-                
-                <Cube position={new THREE.Vector3(0,0,-5)} cubeQuaternion={quaternion.current} canvasRef={ref} onHand={()=>setCount(c=>c+1)} onClear={()=>setCleared(true)}/>
-                <mesh position={[0,0,-20]} >
-                    <planeBufferGeometry attach="geometry" args={[1000, 1000]} />
-                    <meshStandardMaterial attach="material" color={'white'} side={THREE.DoubleSide} />
+        <div ref={ref} style={{ width: "100%", height: "100%" }}>
+            <Canvas>
+                <PartyLight position={new THREE.Vector3(0, 0, 5)} angle={0.3} visible={cleared} />
+                <ambientLight intensity={0.3} />
+                <pointLight position={[2, 2, 2]} intensity={1} visible={!cleared} />
+                <mesh onPointerDown={(e) => {
+                    //console.log('push'); 
+                    setDragCube(true);
+                    dragBefPos.current.x = e.clientX;
+                    dragBefPos.current.y = e.clientY;
+                }}
+                    onPointerUp={() => setDragCube(false)} onPointerOut={() => setDragCube(false)} onPointerMove={onDrag}>
+
+                    <Cube position={new THREE.Vector3(0, 0, -5)} cubeQuaternion={quaternion.current} canvasRef={ref} onHand={() => setCount(c => c + 1)} onClear={() => setCleared(true)} />
+                    <mesh position={[0, 0, -20]} >
+                        <planeBufferGeometry attach="geometry" args={[1000, 1000]} />
+                        <meshStandardMaterial attach="material" color={'white'} side={THREE.DoubleSide} />
+                    </mesh>
                 </mesh>
-            </mesh>
-        </Canvas>
-        {/* <Box position={"absolute"} component={Paper} right={"10%"} bottom={"10%"}>
-            <Typography variant="h2">{count}手</Typography>
-        </Box> */}
+            </Canvas>
+            {cleared &&
+                <Box position="absolute" top="50%" left="50%">
+                    <a data-size="large" href="https://twitter.com/share?ref_src=twsrc%5Etfw" className="twitter-share-button"
+                        data-text={count+"手でルービックキューブとけた！"} data-show-count="false">Tweet</a>
+                </Box>
+            }
         </div>
     );
 }
