@@ -18,7 +18,7 @@ const Text = forwardRef<Group, {vAlign?:string,hAlign?:string,size?:number,color
         self.position.x = position.x + (hAlign === 'center' ? -size.x / 2 : hAlign === 'right' ? 0 : -size.x)
         self.position.y = position.y + (vAlign === 'center' ? -size.y / 2 : vAlign === 'top' ? 0 : -size.y)
         self.position.z = position.z
-        console.log(hAlign);
+        //console.log(hAlign);
       },
       [children]
     )
